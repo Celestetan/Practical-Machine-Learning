@@ -1,0 +1,109 @@
+---
+title: "Practical Machine Learning - Prediction Project Writeout"
+output: html_document
+---
+
+Introduction
+------------
+The goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to perform analysis to determine what activity an individual has performed.
+
+Load the necessary libraries
+----------------------------
+```{r, echo=TRUE}
+library(caret)
+library(randomForest)
+library(foreach)
+```
+
+Load the training data
+----------------------
+```{r, echo=TRUE}
+training_data <- read.csv("pml-training.csv", header = TRUE)
+```
+
+Clean the data
+--------------
+1. Replace the #DIV/0! as NA
+2. Clean the missing data
+3. Drop some useless variables that are not used
+4. Convert factor variables to numerics
+
+```{r, echo=TRUE}
+training_data <- read.csv("pml-training.csv", header = TRUE, na.strings=c("#DIV/0!"))
+checkMissData <- (colSums(is.na(training_data))) / (dim(training_data)[1])
+names(which(checkMissData > 0.5 ))
+training_data [,names(which(checkMissData > 0.5 ))] <- list(NULL)
+training_data[ , c("user_name", "X", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp" )] <- list(NULL)
+classe <- training_data$classe
+training_data$classe <- NULL
+for (i in colnames(training_data)) { training_data[,i] <- as.numeric(training_data[,i]) }
+training_data$classe <- classe
+```
+
+Plot the variable to analyse if skew is detected before creating partitions.
+
+```{r, echo=TRUE}
+plot(training_data$classe)
+```
+
+Create data partitions
+----------------------
+Set the seed to 1234 to make it reproducible.
+We will use 70% for training and 30% for testing.
+
+```{r, echo=TRUE}
+set.seed(1234)
+inTrain <- createDataPartition(training_data$classe, p=0.7, list=FALSE)
+training <- training_data[inTrain,]
+testing <- training_data[-inTrain,]
+```
+
+Building a model
+----------------
+By trial and error, ntree of 200 is used.
+```{r, echo=TRUE}
+RF_model <- randomForest( classe ~ ., data=training, importance=TRUE, ntree=200)
+RF_model
+```
+
+Confusion matrix indicates 0.33% which is quite accurate. We will use it on the testing data.
+
+```{r, echo=TRUE}
+predictions <- predict( RF_model, newdata=testing[,-(dim(testing)[2]) ])
+
+confusionMatrix(predictions, testing$classe )
+```
+
+Confusion matrix indicates 0.9978% which is very accurate. We can also see that the values of sensitivity and specificity have good values; thus the model is good. Predictions look accurate too.
+
+Run the prediction using the model built
+----------------------------------------
+The same steps were done to the testing data. 
+The results of the prediction are then shown.
+
+```{r, echo=TRUE}
+testing_data <- read.csv("pml-testing.csv", header = TRUE, na.strings=c("#DIV/0!"))
+testing_data[,names(which(checkMissData > 0.5 ))] <- list(NULL)
+testing_data[ ,c("user_name", "X", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp" )] <- list(NULL)
+for (i in colnames(testing_data)) { testing_data[,i] <- as.numeric(testing_data[,i]) }
+
+predictions_new <- predict(RF_model, newdata = testing_data[,-(dim(testing_data)[2])])
+
+predictions_new
+```
+
+Write the prediction into files.
+
+```{r, echo=TRUE}
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_", i ,".txt")
+    write.table(x[i], file = filename, quote = FALSE,
+                row.names = FALSE, col.names = FALSE)
+  }
+}
+
+pml_write_files(predictions_new)
+```
